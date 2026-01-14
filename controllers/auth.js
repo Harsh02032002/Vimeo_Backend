@@ -71,6 +71,9 @@ export const signin = async (req, res, next) => {
     res
       .cookie("access_token", token, {
         httpOnly: true,
+        secure: true, // 🔥 MUST for Vercel
+        sameSite: "none", // 🔥 cross-domain
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       })
       .status(200)
       .json(others);
