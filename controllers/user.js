@@ -1,22 +1,56 @@
 import { createError } from "../error.js";
 import User from "../models/User.js";
 import Video from "../models/Video.js";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
-export const updateUser = async(req, res, next) => {
-    if (req.params.id === req.user.id) {
-        try {
-            if (req.body.username.length < 3) return next(createError(404, "Username should be 3 char long"));
-            const updatedUser = await User.findByIdAndUpdate(req.params.id, {
-                $set: req.body
-            }, { new: true, useFindAndModify: false })
-            res.status(200).json(updatedUser);
-        } catch (error) {
-            error.message.includes("username") ? next(createError(404, "Username already exists")) : next(createError(404, "Something went wrong"))
-        }
-    } else {
-        return next(createError(403, 'You are not authorized to update this user'));
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/profile-pic";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-}
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+const upload = multer({ storage });
+
+export const updateUser = [
+  upload.single("img"),
+  async (req, res, next) => {
+    if (req.params.id !== req.user.id) {
+      return next(createError(403, "Not authorized"));
+    }
+
+    try {
+      const updates = {
+        name: req.body.name,
+        username: req.body.username,
+      };
+
+      if (req.file) {
+        const protocol = req.protocol;
+        const host = req.get("host");
+        updates.img = `${protocol}://${host}/uploads/profile-pic/${req.file.filename}`;
+      }
+
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user.id,
+        { $set: updates },
+        { new: true }
+      );
+
+      res.status(200).json(updatedUser);
+    } catch (err) {
+      next(err);
+    }
+  }
+];
 export const deleteUser = async(req, res, next) => {
     if (req.params.id === req.user.id) {
         try {
@@ -98,31 +132,45 @@ export const dislike = async(req, res, next) => {
 // Save a video
 // userController.js
 export const saveVideo = async (req, res, next) => {
+    console.log("USER:", req.user);
+    console.log("VIDEO ID:", req.params.videoId);
   try {
     const userId = req.user.id;
-    const videoId = req.params.id;
-
+    const videoId = req.params.videoId;
+    
     const video = await Video.findById(videoId);
-    if (!video) return next(createError(404, "Video not found"));
+    if (!video) {
+      return res.status(404).json("Video not found");
+    }
 
-    const isSaved = video.savedBy.includes(userId);
+    const alreadySaved = video.savedBy.includes(userId);
 
-    if (isSaved) {
+    if (alreadySaved) {
+      // UNSAVE
+      await User.findByIdAndUpdate(userId, {
+        $pull: { savedVideos: videoId },
+      });
+
       await Video.findByIdAndUpdate(videoId, {
         $pull: { savedBy: userId },
       });
-      res.status(200).json("Video unsaved");
     } else {
+      // SAVE
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: { savedVideos: videoId },
+      });
+
       await Video.findByIdAndUpdate(videoId, {
         $addToSet: { savedBy: userId },
       });
-      res.status(200).json("Video saved");
     }
+
+    const updatedVideo = await Video.findById(videoId);
+    res.status(200).json(updatedVideo);
   } catch (err) {
     next(err);
   }
 };
-
 
 
 // Share a video (can store user IDs who shared it)
@@ -157,4 +205,31 @@ export const getSavedVideos = async (req, res, next) => {
   }
 };
 
+export const getFollowingList = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select("subscribedUsers");
+
+    const followingUsers = await User.find(
+      { _id: { $in: user.subscribedUsers } },
+      "name img subscribers"
+    );
+
+    res.status(200).json(followingUsers);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getFollowersList = async (req, res, next) => {
+  try {
+    const followers = await User.find(
+      { subscribedUsers: req.user.id },
+      "name img subscribers"
+    );
+
+    res.status(200).json(followers);
+  } catch (err) {
+    next(err);
+  }
+};
 

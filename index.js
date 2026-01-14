@@ -60,6 +60,11 @@ app.use(
   "/uploads/images",
   express.static(path.join(__dirname, "uploads/images"))
 );
+app.use(
+  "/uploads/profile-pic",
+  express.static(path.join(__dirname, "uploads/profile-pic"))
+);
+
 app.use((err, req, res, next) => {
     const status = err.status || 500;
     const message = err.message || "Something went wrong";

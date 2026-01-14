@@ -11,7 +11,8 @@ import {
   getAllTags,
   getByTag,
   search,
-  getByType
+  getByType,
+  getUserVideos,
 } from "../controllers/video.js";
 import { verifyToken } from "../verifyToken.js";
 import { assignFiles,uploadFiles } from "../multerconfig.js";
@@ -34,5 +35,6 @@ router.get("/tags/all", getAllTags);
 router.get("/tags", getByTag);
 router.get("/search", search);
 router.get("/type/:type", getByType);
+router.get("/user/:userId", verifyToken, getUserVideos);
 
 export default router;
