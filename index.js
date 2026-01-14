@@ -8,9 +8,31 @@ import userRoutes from "./routes/users.js";
 import videoRoutes from "./routes/videos.js";
 import commentRoutes from "./routes/comments.js";
 import path from "path";
+import cors from "cors";
+
 const __dirname = path.resolve();
 const app = express();
 dotenv.config();
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://vi-tube-frontend.vercel.app",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (like Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 
 const connect = () => {
   mongoose

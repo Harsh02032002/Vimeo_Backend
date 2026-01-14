@@ -99,19 +99,30 @@ export const dislike = async(req, res, next) => {
 // userController.js
 export const saveVideo = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id); // req.user.id comes from auth middleware
+    const userId = req.user.id;
     const videoId = req.params.id;
 
-    if (!user.savedVideos.includes(videoId)) {
-      user.savedVideos.push(videoId);
-      await user.save();
-    }
+    const video = await Video.findById(videoId);
+    if (!video) return next(createError(404, "Video not found"));
 
-    res.status(200).json("Video saved successfully");
+    const isSaved = video.savedBy.includes(userId);
+
+    if (isSaved) {
+      await Video.findByIdAndUpdate(videoId, {
+        $pull: { savedBy: userId },
+      });
+      res.status(200).json("Video unsaved");
+    } else {
+      await Video.findByIdAndUpdate(videoId, {
+        $addToSet: { savedBy: userId },
+      });
+      res.status(200).json("Video saved");
+    }
   } catch (err) {
     next(err);
   }
 };
+
 
 
 // Share a video (can store user IDs who shared it)
@@ -137,9 +148,10 @@ export const shareVideo = async (req, res, next) => {
 // Get all saved videos of a user
 export const getSavedVideos = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    const savedVideos = await Video.find({ _id: { $in: user.savedVideos } });
-    res.status(200).json(savedVideos);
+    const videos = await Video.find({
+      savedBy: req.user.id,
+    });
+    res.status(200).json(videos);
   } catch (err) {
     next(err);
   }
