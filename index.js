@@ -11,10 +11,37 @@ import videoRoutes from "./routes/videos.js";
 import commentRoutes from "./routes/comments.js";
 
 dotenv.config();
+
 const app = express();
 const __dirname = path.resolve();
 
-/* ===================== CORS ===================== */
+/* ===============================
+   🔥 MONGO CONNECTION (CACHED)
+   =============================== */
+
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function connectDB() {
+  if (cached.conn) return cached.conn;
+
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(process.env.MONGO_URI, {
+      bufferCommands: false,
+      maxPoolSize: 10,
+    });
+  }
+
+  cached.conn = await cached.promise;
+  console.log("✅ MongoDB connected");
+  return cached.conn;
+}
+
+/* ===============================
+   🔥 MIDDLEWARES
+   =============================== */
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -23,55 +50,32 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: allowedOrigins,
     credentials: true,
   })
 );
 
-/* ===================== MONGODB (IMPORTANT FIX) ===================== */
-
-let isConnected = false;
-
-const connectDB = async () => {
-  if (isConnected) {
-    console.log("MongoDB already connected");
-    return;
-  }
-
-  try {
-    const db = await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
-    isConnected = db.connections[0].readyState;
-    console.log("MongoDB connected successfully");
-  } catch (error) {
-    console.error("MongoDB connection failed:", error);
-    throw error;
-  }
-};
-
-/* ===================== MIDDLEWARES ===================== */
-
-app.use(cookieParser());
 app.use(express.json());
+app.use(cookieParser());
 
-/* ===================== ROUTES ===================== */
+/* ===============================
+   🔥 CONNECT DB BEFORE ROUTES
+   =============================== */
+
+await connectDB();
+
+/* ===============================
+   🔥 ROUTES
+   =============================== */
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/comments", commentRoutes);
 
-/* ===================== STATIC FILES ===================== */
+/* ===============================
+   🔥 STATIC FILES
+   =============================== */
 
 app.use(
   "/uploads/videos",
@@ -86,23 +90,22 @@ app.use(
   express.static(path.join(__dirname, "uploads/profile-pic"))
 );
 
-/* ===================== ERROR HANDLER ===================== */
+/* ===============================
+   🔥 ERROR HANDLER
+   =============================== */
 
 app.use((err, req, res, next) => {
-  const status = err.status || 500;
-  const message = err.message || "Something went wrong";
-  res.status(status).json({
+  console.error("❌ ERROR:", err.message);
+
+  res.status(err.status || 500).json({
     success: false,
-    message,
-    status,
+    message: err.message || "Something went wrong",
+    status: err.status || 500,
   });
 });
 
-/* ===================== SERVER ===================== */
+/* ===============================
+   🔥 EXPORT FOR VERCEL
+   =============================== */
 
-const PORT = process.env.PORT || 8000;
-
-app.listen(PORT, async () => {
-  await connectDB(); // 🔥 VERY IMPORTANT
-  console.log(`Server running on port ${PORT}`);
-});
+export default app;
